@@ -2,19 +2,22 @@ require('dotenv').config()
 const express=require('express')
 const mongoose=require('mongoose')
 const User = require('./models/User')
+const Medicine=require('./models/Medicine')
 const bcrypt=require('bcryptjs')
 
 const cors=require('cors')
-
+const axios=require('axios')
 const nodeMailer=require('nodemailer')
 const otpGenerator=require('otp-generator')
+const cron=require('node-cron')
+const admin=require('./firebase')
 const router = express.Router();
 const app = express()
 const port = process.env.PORT || 3000
 app.use(cors())
 app.use(express.json())
 
-mongoose.connect("mongodb+srv://tejmulay12:Mongodb12@cluster0.pffsy.mongodb.net/").then(()=>{
+mongoose.connect(process.env.MONGO_URI).then(()=>{
   console.log("mongodb database connected successfully")
 })
 const transporter = nodeMailer.createTransport({
@@ -42,8 +45,9 @@ app.post('/signup',async (req,res)=>{
        const fname=req.body.fname;
        const lname=req.body.lname;
        const dob=req.body.dob;
-       const mobile_no=req.body.mob;
+       const mobile_no=req.body.mobile_no;
        const password=req.body.password;
+       const fcmToken=req.body.fcmToken;
        
       const existingUser=await User.findOne({email});
       if(existingUser){
@@ -52,7 +56,7 @@ app.post('/signup',async (req,res)=>{
 
       const hashedPassword = await bcrypt.hash(password, 10);
 
-       const newdata=new User({email,fname,lname,dob,mobile_no,password:hashedPassword,otp:null,isVerified:true});
+       const newdata=new User({email,fname,lname,dob,mobile_no,password:hashedPassword,otp:null,isVerified:true,fcmToken});
        await newdata.save();
     //   console.log(req.body);
        res.send("data saved successfully")
@@ -62,6 +66,7 @@ app.post('/signup',async (req,res)=>{
          res.status(500).send("Internal Server Error")
     }
 })
+
 
 app.post('/verify-otp', async (req,res)=>{
   const email=req.body.email;
@@ -96,9 +101,9 @@ app.post('/login',async (req,res)=>{
           return res.status(400).json({ msg: "Incorrect password" }); 
         }
 
-        if (user.isVerified) {
-          return res.status(200).json({ msg: "Login successful!" });
-      }
+  //      if (user.isVerified) {
+    //      return res.status(200).json({ msg: "Login successful!" });
+      //}
 
        const otp = otpGenerator.generate(6, { digits: true, alphabets: false, specialChars: false });
        user.otp=otp;
@@ -124,7 +129,128 @@ app.post('/login',async (req,res)=>{
     }
 })
 
+const sendNotification=async(userId,medicine)=>{
+  try{
+    const user=await User.findById(userId)
+    if(!user || !user.fcmToken){
+       console.log("User not found or fcm token is missing",userId)
+      return;
+    }
 
+    const message={
+      notification:{
+        title:"Medicine reminder ⏰",
+        body:`Time to take your ${medicine.medicineName} (${medicine.dosage})`
+      },
+      token:user.fcmToken
+    };
+
+    await admin.messaging().send(message);
+    console.log(`Reminder sent for medicine ${medicine.medicineName}`)
+
+  }
+  catch(error){
+    console.log("error sending notification",error)
+  }
+}
+
+cron.schedule("* * * * *",async()=>{
+  console.log("Checking for scheduled medicine remainders....");
+
+  const now=new Date();
+  const currentHours=now.getHours();
+  const currentMinutes=now.getMinutes();
+  const currentTime=`${currentHours}:${currentMinutes}`;
+
+  try{
+    const medicines=await Medicine.find();
+    if(!medicines||medicines.length===0){
+      console.log("no medicine found");
+      return;
+    }
+
+    medicines.forEach(async(medicineEntry)=>{
+      if(!medicineEntry.medicines||!Array.isArray(medicineEntry.medicines)){
+        console.log("invalid medicine structure for user:",medicineEntry.userId);
+        return;
+      }
+    })
+    medicines.forEach(async (medicineEntry)=>{
+      medicineEntry.medicines.forEach(async (medicine)=>{
+        if(medicine.timeSchedule.includes(currentTime)){
+          await sendNotification(medicineEntry.userId,medicine)
+          console.log("medicine reminder sent")
+        }
+      })
+    })
+  }
+  catch(error){
+    console.log("error fetching medicine",error)
+  }
+})
+app.post('/process-prescription', async (req,res)=>{
+  try{
+    const base64Image=req.body.image;
+    const response=axios.post("http://localhost:5000/extract-text",{image:base64Image});
+    
+    return res.json({extractedText:(await response).data.text}) 
+   // const extractedMedicines = response.data.medicines;
+
+    // Save medicines to database
+  //  const medicineDocs = extractedText.map(med => ({
+    //    userId: req.body.userId,
+      //  medicineName: med.name,
+        //dosage: med.dosage,
+        //timeSchedule: med.schedule
+   // }));
+
+ //   await Medicine.insertMany(medicineDocs);
+
+    // Send extracted data back to frontend
+  //  res.json({ medicines: extractedMedicines });
+
+
+  
+  }
+  catch(error){
+    console.error("error calling paddle-ocr api",error)
+    return res.status(500).json({msg:"failed to process prescription"})
+  }
+
+})
+
+app.get('/medicines/:userId',async(req,res)=>{
+  try{
+    const {userId}=req.params;
+    const userMedicines=await Medicine.find({userId})
+    res.status(200).json(userMedicines)
+  }
+  catch(error){
+    res.status(500).json({msg:"error fetching medicines"})
+    console.log(error)
+  }
+})
+app.post('/add-medicine',async (req,res)=>{
+  try{
+    const {userId,medicines}=req.body;
+    console.log(medicines)
+ /*   const medicineDocs=medicines.map(med=>({
+      ...med,
+      userId
+    }))
+    await Medicine.insertMany(medicineDocs);
+    console.log(medicineDocs)
+  */
+  const newMedicine=new Medicine({userId,medicines})
+  await newMedicine.save();
+  console.log("saved data",newMedicine)
+    res.status(201).json({msg:"medicines details added successfully"})
+  }
+  catch(error){
+    res.status(500).json({error:"error adding medicine details"})
+    console.log(error)
+  }
+})
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
   })
