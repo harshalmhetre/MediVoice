@@ -1,5 +1,5 @@
 const admin=require('firebase-admin')
-const serviceAccount=require('./medivoice-721e9-firebase-adminsdk-fbsvc-cf6985ba9e.json');
+const serviceAccount=require('./prescriptionapp-feff3-firebase-adminsdk-fbsvc-bcd534519a.json');
 
 admin.initializeApp({
     credential:admin.credential.cert(serviceAccount)

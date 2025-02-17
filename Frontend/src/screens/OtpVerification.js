@@ -88,32 +88,9 @@ const OTPVerificationScreen = ({ route, navigation }) => {
     ]).start();
   };
 
-  const handleResendOTP = async () => {
-    if (!email) {
-      Alert.alert('Error', 'Invalid email address');
-      return;
-    }
+  
 
-    setIsLoading(true);
-    try {
-      const response = await axios.post('http://192.168.219.163:3000/resend-otp', {
-        email: email
-      });
-
-      if (response.data === "OTP sent successfully") {
-        Alert.alert('Success', 'OTP has been resent to your email');
-        setResendDisabled(true);
-        setTimer(30);
-      }
-    } catch (error) {
-      Alert.alert(
-        'Error',
-        error.response?.data?.msg || 'Failed to resend OTP. Please try again.'
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    
 
   const handleVerifyOTP = async () => {
     const otpString = otp.join('');
@@ -135,17 +112,9 @@ const OTPVerificationScreen = ({ route, navigation }) => {
         otp: otpString
       });
 
-      if (response.data === "OTP verified successfully") {
-        Alert.alert(
-          'Success',
-          'Email verified successfully!',
-          [
-            {
-              text: 'Proceed to Login',
-              onPress: () => navigation.navigate('Dashboard')
-            }
-          ]
-        );
+      if (response.data.msg === "Email verified successfully") {
+        navigation.navigate('Dashboard')
+          
       }
     } catch (error) {
       shakeError();
@@ -202,7 +171,7 @@ const OTPVerificationScreen = ({ route, navigation }) => {
                 ref={(ref) => inputRefs.current[index] = ref}
                 style={styles.otpInput}
                 maxLength={1}
-                keyboardType="numeric"
+                
                 value={digit}
                 onChangeText={(value) => handleOtpChange(value, index)}
                 onKeyPress={(e) => handleKeyPress(e, index)}
@@ -222,19 +191,7 @@ const OTPVerificationScreen = ({ route, navigation }) => {
             )}
           </TouchableOpacity>
 
-          <View style={styles.resendContainer}>
-            <TouchableOpacity 
-              onPress={handleResendOTP}
-              disabled={resendDisabled || isLoading}
-            >
-              <Text style={[
-                styles.resendText,
-                (resendDisabled || isLoading) && styles.resendTextDisabled
-              ]}>
-                Resend Code {resendDisabled ? `(${timer}s)` : ''}
-              </Text>
-            </TouchableOpacity>
-          </View>
+          
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

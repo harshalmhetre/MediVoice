@@ -45,19 +45,19 @@ const LoginScreen = ({ navigation }) => {
 
     setIsLoading(true);
     try {
-      const response = await api.post('/login', {
+      const response = await api.post('http://192.168.219.163:3000/login', {
         email: credentials.email,
         password: credentials.password,
       });
 
       if (response.data.msg === "OTP sent, please verify your email") {
         // Navigate to OTP verification screen
-        navigation.navigate('Otpverification', {
+        navigation.navigate('OtpVerification', {
           email: credentials.email
         });
       } else if (response.data.msg === "Login successful!") {
         // Navigate to Dashboard if already verified
-        navigation.navigate('Dashboard');
+        navigation.navigate('OtpVerification');
       }
     } catch (error) {
       if (error.response) {

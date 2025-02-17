@@ -7,8 +7,8 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import DashboardScreen from '../screens/DashboardScreen';
 import OtpVerification from '../screens/OtpVerification';
-import ProfileScreen  from '../screens/ProfileScreen';
-import AddCourseScreen  from '../screens/AddCourseScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import AddCourseScreen from '../screens/AddCourseScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -16,19 +16,19 @@ export default function AppNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Landing">
-        <Stack.Screen 
-          name="Landing" 
+        <Stack.Screen
+          name="Landing"
           component={LandingScreen}
           options={{ headerShown: false }}
         />
-        <Stack.Screen name="ScanningScreen" component={ScanningScreen} />
-        <Stack.Screen name="Result" component={ResultsScreen} />
-        <Stack.Screen name="OtpVerification" component={OtpVerification} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Signup" component={RegisterScreen} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} />
-        <Stack.screen name="Profile" screen={ProfileScreen} />
-        <Stack.screen name="AddCourse" component={AddCourseScreen} />
+        <Stack.Screen name="ScanningScreen" component={ScanningScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="Result" component={ResultsScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="OtpVerification" component={OtpVerification} options={{ headerShown: false }}/>
+        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="Signup" component={RegisterScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ headerShown: false }}/>
+        <Stack.Screen name="Profile" component={ProfileScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AddCourse" component={AddCourseScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -77,13 +77,15 @@ app.post('/verify-otp', async (req,res)=>{
   }
 
   if(user.otp!=OTP){
+    console.log("otp invalid");
     return res.status(400).json({msg:"Invalid OTP"});
   }
-  user.isVerified=true;
-  user.otp=null;
-  await user.save();
-
-  res.json({msg:"Email verified successfully"});
+  else{
+    user.otp=null;
+  await user.save()
+  console.log("verified") ;
+  return res.json({msg:"Email verified successfully"});
+  } 
 
 })
 app.post('/login',async (req,res)=>{
@@ -101,9 +103,9 @@ app.post('/login',async (req,res)=>{
           return res.status(400).json({ msg: "Incorrect password" }); 
         }
 
-  //      if (user.isVerified) {
-    //      return res.status(200).json({ msg: "Login successful!" });
-      //}
+      //  if (user.isVerified) {
+      //    return res.status(200).json({ msg: "Login successful!" });
+      // }
 
        const otp = otpGenerator.generate(6, { digits: true, alphabets: false, specialChars: false });
        user.otp=otp;
