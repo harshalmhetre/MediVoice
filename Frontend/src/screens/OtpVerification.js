@@ -58,7 +58,7 @@ const OTPVerificationScreen = ({ route, navigation }) => {
 
   const fetchUserData = async () => {
     try {
-      const response = await axios.get(`http://192.168.219.163:3000/get-user/${email}`);
+      const response = await axios.get(`http://192.168.219.163:3000/user/${email}`);
       if (response.data) {
         await storeUserData(response.data);
         navigation.navigate('Dashboard'); 

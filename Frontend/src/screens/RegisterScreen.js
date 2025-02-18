@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const RegisterScreen = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(false);

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
@@ -7,13 +7,15 @@ import {
   ScrollView, 
   StyleSheet, 
   Alert, 
-  SafeAreaView 
+  SafeAreaView,
+  ActivityIndicator 
 } from "react-native";
 import CheckBox from "expo-checkbox";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const AddCourseScreen = ({ route, navigation }) => {
+const AddCourseScreen = ({ navigation }) => {
   const [duration, setDuration] = useState("");
   const [medications, setMedications] = useState([]);
   const [newMedication, setNewMedication] = useState({ 
@@ -27,66 +29,107 @@ const AddCourseScreen = ({ route, navigation }) => {
   });
   const [showMedicationForm, setShowMedicationForm] = useState(false);
   const [courseDescription, setCourseDescription] = useState("");
-  const email = route?.params?.email;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState(null);
+
+  // Fetch user email from AsyncStorage when component mounts
+  useEffect(() => {
+    const getUserEmail = async () => {
+      try {
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          const { email } = JSON.parse(userData);
+          setUserEmail(email);
+        } else {
+          Alert.alert('Error', 'User data not found. Please login again.');
+          navigation.navigate('Login');
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        Alert.alert('Error', 'Failed to load user data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    getUserEmail();
+  }, []);
 
   const calculateDates = (days) => {
     const startDate = new Date();
     const endDate = new Date();
     endDate.setDate(startDate.getDate() + parseInt(days, 10));
-    return { startDate, endDate };
+    
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0]
+    };
+  };
+
+  const validateMedication = (medication) => {
+    if (!medication.name.trim()) {
+      throw new Error("Medication name cannot be empty");
+    }
+    if (!medication.description.trim()) {
+      throw new Error("Medication description cannot be empty");
+    }
+    if (!medication.frequency.morning && 
+        !medication.frequency.afternoon && 
+        !medication.frequency.night) {
+      throw new Error("Please select at least one frequency for the medication");
+    }
   };
 
   const addMedication = () => {
-    if (!newMedication.name.trim()) {
-      Alert.alert("Error", "Medication name cannot be empty.");
-      return;
+    try {
+      validateMedication(newMedication);
+      setMedications([...medications, { ...newMedication }]);
+      setNewMedication({ 
+        name: "", 
+        description: "", 
+        frequency: { morning: false, afternoon: false, night: false } 
+      });
+      setShowMedicationForm(false);
+    } catch (error) {
+      Alert.alert("Validation Error", error.message);
     }
-    if (!newMedication.description.trim()) {
-      Alert.alert("Error", "Medication description cannot be empty.");
-      return;
-    }
-
-    setMedications([...medications, { ...newMedication }]);
-    setNewMedication({ 
-      name: "", 
-      description: "", 
-      frequency: { morning: false, afternoon: false, night: false } 
-    });
-    setShowMedicationForm(false);
   };
 
   const removeMedication = (index) => {
     setMedications(medications.filter((_, i) => i !== index));
   };
 
-  const submitCourse = async () => {
-    if (!email) {
-      Alert.alert("Error", "User ID is required.");
-      return;
+  const validateCourse = () => {
+    if (!userEmail) {
+      throw new Error("User email is required. Please login again.");
     }
-
     if (!courseDescription.trim()) {
-      Alert.alert("Error", "Please enter a course description.");
-      return;
+      throw new Error("Please enter a course description");
     }
-
     if (!duration.trim() || isNaN(duration) || parseInt(duration, 10) <= 0) {
-      Alert.alert("Error", "Please enter a valid duration in days.");
-      return;
+      throw new Error("Please enter a valid duration in days");
     }
-
     if (medications.length === 0) {
-      Alert.alert("Error", "Please add at least one medication.");
-      return;
+      throw new Error("Please add at least one medication");
     }
+  };
+
+  const submitCourse = async () => {
+  if (isSubmitting) return;
+
+  try {
+    setIsSubmitting(true);
+    validateCourse();
 
     const { startDate, endDate } = calculateDates(duration);
 
+    // Format the dates properly
     const courseData = {
-      email,
+      email: userEmail,
       description: courseDescription,
-      startDate,
-      endDate,
+      startDate: startDate,  // This is already in YYYY-MM-DD format
+      endDate: endDate,      // This is already in YYYY-MM-DD format
       medications: medications.map(med => ({
         name: med.name,
         description: med.description,
@@ -98,26 +141,65 @@ const AddCourseScreen = ({ route, navigation }) => {
       }))
     };
 
-    try {
-      const response = await fetch("http://192.168.219.163:3000/medical-course", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(courseData)
-      });
+    // Log the exact data being sent
+    console.log('Request URL:', "http://192.168.219.163:3000/medical-course");
+    console.log('Request Headers:', {
+      "Content-Type": "application/json",
+      "Accept": "application/json"
+    });
+    console.log('Request Body:', JSON.stringify(courseData, null, 2));
 
-      const data = await response.json();
+    const response = await fetch("http://192.168.219.163:3000/medical-course", {
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(courseData)
+    });
 
-      if (response.ok) {
-        Alert.alert("Success", "Course added successfully!");
-        navigation.goBack();
-      } else {
-        Alert.alert("Error", data.message || "Failed to add course.");
-      }
-    } catch (error) {
-      console.error("Error submitting course:", error);
-      Alert.alert("Error", "Failed to connect to server.");
+    // Log the complete response
+    const responseData = await response.json();
+    console.log('Response Status:', response.status);
+    console.log('Response Data:', responseData);
+
+    if (!response.ok) {
+      throw new Error(responseData.message || "Failed to add course");
     }
-  };
+
+    if (responseData.success) {
+      // Verify the saved data
+      console.log('Saved Course Data:', responseData.data);
+      Alert.alert(
+        "Success", 
+        "Course added successfully!",
+        [{ text: "OK", onPress: () => navigation.goBack() }]
+      );
+    } else {
+      throw new Error(responseData.message || "Failed to save course");
+    }
+  } catch (error) {
+    console.error("Error submitting course:", error);
+    Alert.alert(
+      "Error", 
+      error.message || "Failed to add course. Please try again.",
+      [{ text: "OK" }]
+    );
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
+
+
 
   return (
     <SafeAreaView style={styles.container}>

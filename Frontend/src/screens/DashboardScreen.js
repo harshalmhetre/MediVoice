@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,158 +6,267 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  ActivityIndicator
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
+  Modal,
+  Platform
 } from 'react-native';
 import { Calendar, Camera, User, Bell } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import * as Notifications from 'expo-notifications';
+
+// Configure notifications with specified times
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+  }),
+});
+
+const MedicationCard = ({ course, onPress }) => {
+  const getDaysRemaining = useCallback((endDate) => {
+    const today = new Date();
+    const end = new Date(endDate);
+    const diffTime = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
+    return diffTime > 0 ? diffTime : 0;
+  }, []);
+
+  const daysLeft = getDaysRemaining(course.endDate);
+
+  return (
+    <TouchableOpacity 
+      style={styles.card} 
+      onPress={onPress}
+    >
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>{course.description}</Text>
+        <View style={[styles.daysLeftBadge]}>
+          <Text style={styles.daysLeftText}>
+            {daysLeft} days left
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.dateRow}>
+        <Text style={styles.dateText}>
+          {new Date(course.startDate).toLocaleDateString()} - {new Date(course.endDate).toLocaleDateString()}
+        </Text>
+      </View>
+
+      <View style={styles.medicationList}>
+        {course.medications.map((med, index) => (
+          <View key={index} style={styles.medicationItem}>
+            <View>
+              <Text style={styles.medicationName}>{med.name}</Text>
+              <View style={styles.timingRow}>
+                {med.frequency.morning && (
+                  <Text style={styles.timingText}>Morning</Text>
+                )}
+                {med.frequency.afternoon && (
+                  <Text style={styles.timingText}>Afternoon</Text>
+                )}
+                {med.frequency.night && (
+                  <Text style={styles.timingText}>Night</Text>
+                )}
+              </View>
+            </View>
+            <TouchableOpacity 
+              style={styles.reminderButton}
+              onPress={() => onSetReminder(course, med)}
+            >
+              <Bell size={16} color="#2563EB" />
+              <Text style={styles.reminderText}>Reminder</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
 const Dashboard = () => {
   const [courses, setCourses] = useState([]);
-  const [userInfo, setUserInfo] = useState({ name: 'Customer', age: '' });
+  const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const navigation = useNavigation();
 
   useEffect(() => {
-    fetchUserInfo();
-    fetchMedicalCourses();
+    requestNotificationPermissions();
   }, []);
 
-  const fetchUserInfo = async () => {
-    try {
-      const userData = await AsyncStorage.getItem('userInfo');
-      if (userData) {
-        const parsedUserData = JSON.parse(userData);
-        setUserInfo(parsedUserData);
-      }
-    } catch (error) {
-      console.error('Error fetching user info:', error);
+  const requestNotificationPermissions = async () => {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert(
+        'Permission Required',
+        'Please enable notifications to receive medication reminders'
+      );
     }
   };
 
-  const fetchMedicalCourses = async () => {
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
+
+  const fetchUserData = async () => {
     try {
-      setLoading(true);
-      // Replace with your actual API endpoint
-      const response = await fetch('YOUR_API_ENDPOINT/medical-courses');
-      const data = await response.json();
-      setCourses(data);
+      const storedData = await AsyncStorage.getItem('userData');
+      if (storedData) {
+        const parsedData = JSON.parse(storedData);
+        setUserData(parsedData);
+        return parsedData;
+      }
+      return null;
     } catch (error) {
-      console.error('Error fetching medical courses:', error);
+      console.error('Error fetching user data:', error);
+      Alert.alert('Error', 'Unable to load user data');
+      return null;
+    }
+  };
+
+  const fetchMedicalCourses = async (email) => {
+    try {
+      const response = await fetch(`http://192.168.219.163:3000/medical-courses/${email}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch courses');
+      }
+
+      return data.data || [];
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+      Alert.alert('Error', 'Unable to load medication courses');
+      return [];
+    }
+  };
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const user = await fetchUserData();
+      if (user?.email) {
+        const medicalCourses = await fetchMedicalCourses(user.email);
+        setCourses(medicalCourses);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const getDaysRemaining = (endDate) => {
-    const today = new Date();
-    const end = new Date(endDate);
-    const diffTime = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-    return diffTime > 0 ? diffTime : 0;
+  const onSetReminder = async (course, medication) => {
+    try {
+      // Set specific times for notifications
+      const notificationTimes = {
+        morning: { hour: 8, minute: 30 },
+        afternoon: { hour: 13, minute: 30 },
+        night: { hour: 20, minute: 0 }
+      };
+
+      // Cancel existing notifications for this medication
+      const existingNotifications = await Notifications.getAllScheduledNotificationsAsync();
+      const medicationNotifications = existingNotifications.filter(
+        notification => notification.content.data.medicationId === medication._id
+      );
+      
+      for (const notification of medicationNotifications) {
+        await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
+
+      // Schedule new notifications based on frequency
+      Object.entries(medication.frequency).forEach(async ([time, isEnabled]) => {
+        if (isEnabled && notificationTimes[time]) {
+          const { hour, minute } = notificationTimes[time];
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `${course.description} - ${medication.name}`,
+              body: `Time to take your medication: ${medication.description}`,
+              data: { medicationId: medication._id },
+            },
+            trigger: {
+              hour,
+              minute,
+              repeats: true,
+            },
+          });
+        }
+      });
+
+      Alert.alert('Success', 'Reminder set successfully');
+    } catch (error) {
+      console.error('Error setting reminder:', error);
+      Alert.alert('Error', 'Failed to set reminder');
+    }
   };
 
-  const isActive = (course) => {
-    const today = new Date();
-    const startDate = new Date(course.startDate);
-    const endDate = new Date(course.endDate);
-    return today >= startDate && today <= endDate;
-  };
-
-  const getTimingsList = (medication) => {
-    const timings = [];
-    if (medication.frequency.morning) timings.push('Morning');
-    if (medication.frequency.afternoon) timings.push('Afternoon');
-    if (medication.frequency.night) timings.push('Night');
-    return timings.join(', ');
-  };
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  }, []);
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3B82F6" />
+        <ActivityIndicator size="large" color="#2563EB" />
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Hello, {userInfo.name}</Text>
-          <Text style={styles.headerSubtitle}>Age: {userInfo.age}</Text>
+          <Text style={styles.headerTitle}>Hello, {userData?.fname || 'User'}</Text>
           <Text style={styles.headerSubtitle}>Track your medications</Text>
         </View>
-        <User color="white" size={32} />
+        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
+          <User size={24} color="white" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Active Courses */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Active Courses</Text>
-          {courses.filter(isActive).map((course) => (
-            <View key={course._id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardTitle}>{course.description}</Text>
-                  <View style={styles.dateContainer}>
-                    <Calendar size={16} color="#6B7280" />
-                    <Text style={styles.dateText}>
-                      {new Date(course.startDate).toLocaleDateString()} - 
-                      {new Date(course.endDate).toLocaleDateString()}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {getDaysRemaining(course.endDate)} days left
-                  </Text>
-                </View>
-              </View>
-
-              {course.medications.map((med, idx) => (
-                <View key={idx} style={[styles.medicationItem, 
-                  idx !== 0 && styles.medicationBorder]}>
-                  <View>
-                    <Text style={styles.medicationName}>{med.name}</Text>
-                    <Text style={styles.timingsText}>{getTimingsList(med)}</Text>
-                  </View>
-                  <TouchableOpacity style={styles.reminderButton}>
-                    <Bell size={16} color="#2563EB" />
-                    <Text style={styles.reminderText}>Reminder</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          ))}
+      <ScrollView
+        style={styles.content}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Active Courses</Text>
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => navigation.navigate('AddCourse')}
+          >
+            <Text style={styles.addButtonText}>+ Add New</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Completed Courses */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Completed Courses</Text>
-          {courses.filter(course => !isActive(course)).map((course) => (
-            <View key={course._id} style={[styles.card, styles.completedCard]}>
-              <Text style={styles.cardTitle}>{course.description}</Text>
-              <Text style={styles.completedDate}>
-                Completed on {new Date(course.endDate).toLocaleDateString()}
-              </Text>
-            </View>
-          ))}
-        </View>
+        {courses.map(course => (
+          <MedicationCard
+            key={course._id}
+            course={course}
+            onPress={() => navigation.navigate('CourseDetail', { course })}
+          />
+        ))}
       </ScrollView>
 
-      {/* Bottom Navigation */}
       <View style={styles.bottomNav}>
         <TouchableOpacity 
-          style={styles.navButton}
+          style={styles.navItem}
           onPress={() => navigation.navigate('AddCourse')}
         >
           <Calendar size={24} color="#2563EB" />
-          <Text style={styles.navText}>Add Course</Text>
+          <Text style={styles.navText}>Add</Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={styles.navButton}
+          style={styles.navItem}
           onPress={() => navigation.navigate('ScanningScreen')}
         >
           <Camera size={24} color="#2563EB" />
@@ -165,7 +274,7 @@ const Dashboard = () => {
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={styles.navButton}
+          style={styles.navItem}
           onPress={() => navigation.navigate('Profile')}
         >
           <User size={24} color="#2563EB" />
@@ -179,16 +288,12 @@ const Dashboard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#F5F6F8',
   },
   header: {
     backgroundColor: '#2563EB',
     padding: 20,
+    paddingTop: Platform.OS === 'android' ? 50 : 20,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     flexDirection: 'row',
@@ -209,14 +314,27 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
-  section: {
-    marginBottom: 24,
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
-  sectionTitle: {
+  title: {
     fontSize: 20,
     fontWeight: '600',
-    marginBottom: 16,
     color: '#111827',
+  },
+  addButton: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  addButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '500',
   },
   card: {
     backgroundColor: 'white',
@@ -232,90 +350,90 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#111827',
+    flex: 1,
   },
-  dateContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  dateText: {
-    marginLeft: 4,
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  badge: {
-    backgroundColor: '#F3F4F6',
+  daysLeftBadge: {
+    backgroundColor: '#EFF6FF',
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 4,
     borderRadius: 16,
   },
-  badgeText: {
+  daysLeftText: {
+    color: '#2563EB',
     fontSize: 12,
-    color: '#374151',
+    fontWeight: '500',
+  },
+  dateRow: {
+    marginTop: 8,
+  },
+  dateText: {
+    color: '#6B7280',
+    fontSize: 14,
+  },
+  medicationList: {
+    marginTop: 16,
   },
   medicationItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 16,
-    marginTop: 16,
-  },
-  medicationBorder: {
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   medicationName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '500',
     color: '#111827',
   },
-  timingsText: {
-    fontSize: 14,
+  timingRow: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  timingText: {
     color: '#6B7280',
-    marginTop: 2,
+    fontSize: 12,
+    marginRight: 8,
   },
   reminderButton: {
-    backgroundColor: '#EFF6FF',
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-    borderRadius: 8,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
   reminderText: {
     color: '#2563EB',
+    fontSize: 12,
     marginLeft: 4,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  completedCard: {
-    opacity: 0.75,
-  },
-  completedDate: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 4,
   },
   bottomNav: {
-    backgroundColor: 'white',
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 12,
+    padding: 16,
+    backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
-  navButton: {
+  navItem: {
     alignItems: 'center',
   },
   navText: {
     color: '#2563EB',
     fontSize: 12,
     marginTop: 4,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
