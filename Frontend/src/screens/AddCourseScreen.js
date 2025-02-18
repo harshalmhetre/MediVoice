@@ -1,21 +1,35 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, SafeAreaView } from "react-native";
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  ScrollView, 
+  StyleSheet, 
+  Alert, 
+  SafeAreaView 
+} from "react-native";
 import CheckBox from "expo-checkbox";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
 
-const AddCourseScreen = ({ navigation }) => {
+const AddCourseScreen = ({ route, navigation }) => {
   const [duration, setDuration] = useState("");
   const [medications, setMedications] = useState([]);
   const [newMedication, setNewMedication] = useState({ 
     name: "", 
-    description: "", 
-    frequency: { morning: false, afternoon: false, night: false } 
+    description: "",
+    frequency: { 
+      morning: false, 
+      afternoon: false, 
+      night: false 
+    } 
   });
   const [showMedicationForm, setShowMedicationForm] = useState(false);
   const [courseDescription, setCourseDescription] = useState("");
+  const email = route?.params?.email;
 
- const calculateDates = (days) => {
+  const calculateDates = (days) => {
     const startDate = new Date();
     const endDate = new Date();
     endDate.setDate(startDate.getDate() + parseInt(days, 10));
@@ -27,9 +41,17 @@ const AddCourseScreen = ({ navigation }) => {
       Alert.alert("Error", "Medication name cannot be empty.");
       return;
     }
+    if (!newMedication.description.trim()) {
+      Alert.alert("Error", "Medication description cannot be empty.");
+      return;
+    }
 
-    setMedications([...medications, newMedication]);
-    setNewMedication({ name: "", description: "", frequency: { morning: false, afternoon: false, night: false } });
+    setMedications([...medications, { ...newMedication }]);
+    setNewMedication({ 
+      name: "", 
+      description: "", 
+      frequency: { morning: false, afternoon: false, night: false } 
+    });
     setShowMedicationForm(false);
   };
 
@@ -38,6 +60,16 @@ const AddCourseScreen = ({ navigation }) => {
   };
 
   const submitCourse = async () => {
+    if (!email) {
+      Alert.alert("Error", "User ID is required.");
+      return;
+    }
+
+    if (!courseDescription.trim()) {
+      Alert.alert("Error", "Please enter a course description.");
+      return;
+    }
+
     if (!duration.trim() || isNaN(duration) || parseInt(duration, 10) <= 0) {
       Alert.alert("Error", "Please enter a valid duration in days.");
       return;
@@ -49,31 +81,41 @@ const AddCourseScreen = ({ navigation }) => {
     }
 
     const { startDate, endDate } = calculateDates(duration);
-    const userId = "USER_ID_HERE"; // Replace with actual user ID
 
     const courseData = {
-      userId,
-      courseDescription,
-      medications,
+      email,
+      description: courseDescription,
       startDate,
       endDate,
+      medications: medications.map(med => ({
+        name: med.name,
+        description: med.description,
+        frequency: {
+          morning: med.frequency.morning,
+          afternoon: med.frequency.afternoon,
+          night: med.frequency.night
+        }
+      }))
     };
 
     try {
-      const response = await fetch("http://<YOUR_IP>:3000/add-course", {
+      const response = await fetch("http://192.168.219.163:3000/medical-course", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(courseData),
+        body: JSON.stringify(courseData)
       });
+
+      const data = await response.json();
 
       if (response.ok) {
         Alert.alert("Success", "Course added successfully!");
         navigation.goBack();
       } else {
-        Alert.alert("Error", "Failed to add course.");
+        Alert.alert("Error", data.message || "Failed to add course.");
       }
     } catch (error) {
       console.error("Error submitting course:", error);
+      Alert.alert("Error", "Failed to connect to server.");
     }
   };
 
@@ -85,7 +127,7 @@ const AddCourseScreen = ({ navigation }) => {
       >
         <View style={styles.headerContent}>
           <Text style={styles.headerText}>Add Medical Course</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Dashboard')}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="close" size={24} color="white" />
           </TouchableOpacity>
         </View>
@@ -107,7 +149,7 @@ const AddCourseScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.label}>Duration</Text>
+          <Text style={styles.label}>Duration (Days)</Text>
           <View style={styles.durationContainer}>
             <TextInput
               style={styles.durationInput}
@@ -152,12 +194,14 @@ const AddCourseScreen = ({ navigation }) => {
           </View>
         ))}
 
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => setShowMedicationForm(true)}
-        >
-          <Text style={styles.buttonText}>Add Medication</Text>
-        </TouchableOpacity>
+        {!showMedicationForm && (
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => setShowMedicationForm(true)}
+          >
+            <Text style={styles.buttonText}>Add Medication</Text>
+          </TouchableOpacity>
+        )}
 
         {showMedicationForm && (
           <View style={styles.medicationForm}>
@@ -226,13 +270,13 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 40,
-    paddingBottom: 20 ,
+    paddingBottom: 20,
     paddingHorizontal: 20,
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
+    alignItems: 'center',
   },
   headerText: {
     color: "#ffffff",
@@ -270,6 +314,7 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: "#ffffff",
     color: "#1f2937",
+    minHeight: 45,
   },
   durationContainer: {
     flexDirection: "row",

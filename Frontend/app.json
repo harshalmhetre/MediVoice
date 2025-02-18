@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "prescription-app-frontend",
+    "slug": "prescription-app-frontend",
+    "version": "1.0.0",
+    "platforms": ["ios", "android", "web"],
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to scan prescriptions.",
+        "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to upload prescriptions."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "package": "com.prescription.app"
+    }
+  }
+}

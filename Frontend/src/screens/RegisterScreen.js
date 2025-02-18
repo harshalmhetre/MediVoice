@@ -72,6 +72,15 @@ const RegisterScreen = ({ navigation }) => {
     return true;
   };
 
+  const storeUserData = async (userData) => {
+    try {
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+    } catch (error) {
+      console.error('Error storing user data:', error);
+      throw error;
+    }
+  };
+
   const handleRegister = async () => {
     if (!validateForm()) return;
 
@@ -86,40 +95,30 @@ const RegisterScreen = ({ navigation }) => {
         password: userData.password,
       });
 
-      if (response.data === "data saved successfully") {
-        coonsole.log("registration sucess");
-        // Navigate to OTP verification screen with necessary user data
-        navigation.navigate('OTPVerification', {
-          email: userData.email,
-          mobile: userData.mob,
-          // Add any other data you need to pass to the OTP screen
-        });
+      if (response.data.user) {
+        await storeUserData(response.data.user);
+        navigation.replace('Dashboard');
       }
     } catch (error) {
-      let errorMessage = 'Registration failed';
-      console.log("error");
-      if (error.response) {
-        errorMessage = error.response.data.msg || errorMessage;
-        if (errorMessage === "User aready exists, try logging in!!") {
-          console.log("already Exists");
-          Alert.alert(
-            'Account Exists',
-            'This email is already registered. Please login instead.',
-            [
-              {
-                text: 'Go to Login',
-                onPress: () => navigation.navigate('Login'),
-              },
-              {
-                text: 'Cancel',
-                style: 'cancel',
-              },
-            ]
-          );
-          return;
-        }
+      const errorMessage = error.response?.data?.msg || 'Registration failed';
+      if (errorMessage === "User already exists, try logging in!!") {
+        Alert.alert(
+          'Account Exists',
+          'This email is already registered. Please login instead.',
+          [
+            {
+              text: 'Go to Login',
+              onPress: () => navigation.navigate('Login'),
+            },
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Registration Error', errorMessage);
       }
-      Alert.alert('Registration Error', errorMessage);
     } finally {
       setIsLoading(false);
     }

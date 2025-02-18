@@ -51,14 +51,12 @@ const LoginScreen = ({ navigation }) => {
       });
 
       if (response.data.msg === "OTP sent, please verify your email") {
-        // Navigate to OTP verification screen
+  
         navigation.navigate('OtpVerification', {
           email: credentials.email
         });
-      } else if (response.data.msg === "Login successful!") {
-        // Navigate to Dashboard if already verified
-        navigation.navigate('OtpVerification');
-      }
+      } 
+
     } catch (error) {
       if (error.response) {
         Alert.alert('Error', error.response.data.msg || 'Authentication failed');
