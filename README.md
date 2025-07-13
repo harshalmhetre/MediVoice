@@ -28,19 +28,19 @@
   <table>
     <tr>
       <td align="center">
-        <img src="screenshots/homePage.png" alt="Home Screen" width="200"/><br>
+        <img src="screenshots/homePage.jpg" alt="Home Screen" width="200"/><br>
         <b>Home Screen</b>
       </td>
       <td align="center">
-        <img src="screenshots/scannerPage.png" alt="Scan Screen" width="200"/><br>
+        <img src="screenshots/scannerPAge.jpg" alt="Scan Screen" width="200"/><br>
         <b>Scan Prescription</b>
       </td>
       <td align="center">
-        <img src="screenshots/.png" alt="Reminder Setup" width="200"/><br>
-        <b>Set Reminders</b>
+        <img src="screenshots/resultPage.jpg" alt="Result Screen" width="200"/><br>
+        <b>Result Page</b>
       </td>
       <td align="center">
-        <img src="screenshots/profiePage.png" alt="User Dashboard" width="200"/><br>
+        <img src="screenshots/profilePage.jpg" alt="User Dashboard" width="200"/><br>
         <b>Dashboard</b>
       </td>
     </tr>
