@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+opencv-python
+gtts
+PaddleOCR
+paddlepaddle
+python-multipart
+spacy
+rapidfuzz
+ngrok
